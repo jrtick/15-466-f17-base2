@@ -19,26 +19,39 @@ static GLuint link_program(GLuint vertex_shader, GLuint fragment_shader);
 
 
 class Balloon {
-	enum class State = {Healthy, Popping, Gone};
+	enum class State {Healthy, Popping, Gone};
 
 	static std::vector<Balloon*> ActiveBalloons;
 
-	const glm::vec3 radius = glm::vec3(1,1,1);
+	glm::vec3 radius = glm::vec3(1,1,1);
 	glm::vec3 center = glm::vec3();
 	glm::vec3 vel = glm::vec3();
 	glm::vec3 accel = glm::vec3();
-	State curState = State::Healthy;
+	State state = State::Healthy;
 	float elapsed_pop = 0; //only valid when State::Popping. Animate bigger, pop, shrink for black hole effect?
 
+	Balloon(){}
+
+	static Balloon* addBalloon(glm::vec3 center, glm::vec3 radius){
+		Balloon* balloon = (Balloon*) malloc(sizeof(Balloon));
+		*balloon = Balloon();
+
+		balloon->center = center;
+		balloon->radius = radius;
+
+		ActiveBalloons.push_back(balloon);
+		return balloon;
+	}
+
 	static void step(float elapsed){
-		std::vector<Ballon*>::iterator it = ActiveBalloons.begin();
+		std::vector<Balloon*>::iterator it = ActiveBalloons.begin();
 		while(it != ActiveBalloons.end()){
 			Balloon* balloon = *it;
 			if(balloon->state == State::Gone){
 				it = ActiveBalloons.erase(it);
 			}else{
 				balloon->vel += elapsed*balloon->accel;
-				balloon->pos += elapsed*balloon->vel;
+				balloon->center += elapsed*balloon->vel;
 
 				if(balloon->state == State::Popping){
 					balloon->elapsed_pop += elapsed;
@@ -47,18 +60,18 @@ class Balloon {
 		}
 	}
 	static void draw(){
-		for(Balloon* ballon : ActiveBalloons){
+		//for(Balloon* balloon : ActiveBalloons){
 
-		}
+		//}
 	}
 };
-std::vector<Balloon*> Balloon::ActiveBalloons = std::vector<Balloon*>;
+std::vector<Balloon*> Balloon::ActiveBalloons = std::vector<Balloon*>();
 
 
 int main(int argc, char **argv) {
 	//Configuration:
 	struct {
-		std::string title = "Game2: Scene";
+		std::string title = "Game2: Robot Fun Police";
 		glm::uvec2 size = glm::uvec2(640, 480);
 	} config;
 
@@ -67,7 +80,7 @@ int main(int argc, char **argv) {
 		      rotate_low = 0,
 		      rotate_mid = 0,
 		      rotate_high = 0;
-	} robotState;
+	} robotState; // list of angles. Should keep them bounded
 
 	//------------  initialization ------------
 
