@@ -19,6 +19,7 @@ static GLuint link_program(GLuint vertex_shader, GLuint fragment_shader);
 
 
 class Balloon {
+public:
 	enum class State {Healthy, Popping, Gone};
 
 	static std::vector<Balloon*> ActiveBalloons;
@@ -32,7 +33,7 @@ class Balloon {
 
 	Balloon(){}
 
-	static Balloon* addBalloon(glm::vec3 center, glm::vec3 radius){
+	static Balloon* addBalloon(glm::vec3 center, glm::vec3 radius=glm::vec3(1,1,1)){
 		Balloon* balloon = (Balloon*) malloc(sizeof(Balloon));
 		*balloon = Balloon();
 
@@ -59,11 +60,6 @@ class Balloon {
 			}
 		}
 	}
-	static void draw(){
-		//for(Balloon* balloon : ActiveBalloons){
-
-		//}
-	}
 };
 std::vector<Balloon*> Balloon::ActiveBalloons = std::vector<Balloon*>();
 
@@ -76,10 +72,14 @@ int main(int argc, char **argv) {
 	} config;
 
 	struct {
-		float rotate_base = 0,
-		      rotate_low = 0,
-		      rotate_mid = 0,
-		      rotate_high = 0;
+		float base = 0,
+		      low = 0,
+		      mid = 0,
+		      high = 0;
+		void add(float& val,float inc){
+			static const float pi = 3.14159265f;
+			val = fmod(val+inc+2*pi,2*pi);
+		}
 	} robotState; // list of angles. Should keep them bounded
 
 	//------------  initialization ------------
@@ -288,9 +288,43 @@ int main(int argc, char **argv) {
 
 	bool should_quit = false;
 	while (true) {
+		//handle events
 		static SDL_Event evt;
 		while (SDL_PollEvent(&evt) == 1) {
-			//handle input:
+			if(evt.type == SDL_KEYDOWN){
+				switch(evt.key.keysym.sym){
+				case SDLK_ESCAPE:
+				case SDLK_q:
+					should_quit = true;
+					break;
+				case SDLK_a:
+					robotState.add(robotState.base,0.1f);
+					break;
+				case SDLK_s:
+					robotState.add(robotState.base,-0.1f);
+					break;
+				case SDLK_w:
+					robotState.add(robotState.low,0.1f);
+					break;
+				case SDLK_e:
+					robotState.add(robotState.low,-0.1f);
+					break;
+				case SDLK_z:
+					robotState.add(robotState.mid,0.1f);
+					break;
+				case SDLK_x:
+					robotState.add(robotState.mid,-0.1f);
+					break;
+				case SDLK_d:
+					robotState.add(robotState.high,0.1f);
+					break;
+				case SDLK_c:
+					robotState.add(robotState.high,-0.1f);
+					break;
+				default:
+					break;
+				}
+			}
 			if (evt.type == SDL_MOUSEMOTION) {
 				glm::vec2 old_mouse = mouse;
 				mouse.x = (evt.motion.x + 0.5f) / float(config.size.x) * 2.0f - 1.0f;
@@ -300,8 +334,6 @@ int main(int argc, char **argv) {
 					camera.azimuth += -2.0f * (mouse.x - old_mouse.x);
 				}
 			} else if (evt.type == SDL_MOUSEBUTTONDOWN) {
-			} else if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_ESCAPE) {
-				should_quit = true;
 			} else if (evt.type == SDL_QUIT) {
 				should_quit = true;
 				break;
@@ -309,13 +341,20 @@ int main(int argc, char **argv) {
 		}
 		if (should_quit) break;
 
+		//update timers
 		auto current_time = std::chrono::high_resolution_clock::now();
 		static auto previous_time = current_time;
 		float elapsed = std::chrono::duration< float >(current_time - previous_time).count();
 		previous_time = current_time;
 
-		{ //update game state:
-			//tree stack:
+		{ //update game state
+			//manage balloons
+			Balloon::step(elapsed);
+			if(Balloon::ActiveBalloons.size() < 3)
+				Balloon::addBalloon(glm::vec3(0,0,0));
+
+
+			//tree stack
 			for (uint32_t i = 0; i < tree_stack.size(); ++i) {
 				wave_acc[i] += elapsed * (0.3f + 0.3f * i);
 				wave_acc[i] -= std::floor(wave_acc[i]);
@@ -326,7 +365,7 @@ int main(int argc, char **argv) {
 				);
 			}
 
-			//camera:
+			//camera
 			scene.camera.transform.position = camera.radius * glm::vec3(
 				std::cos(camera.elevation) * std::cos(camera.azimuth),
 				std::cos(camera.elevation) * std::sin(camera.azimuth),
@@ -343,7 +382,7 @@ int main(int argc, char **argv) {
 			scene.camera.transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
 		}
 
-		//draw output:
+		//draw output
 		glClearColor(0.5, 0.5, 0.5, 0.0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glEnable(GL_DEPTH_TEST);
@@ -351,7 +390,7 @@ int main(int argc, char **argv) {
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 
-		{ //draw game state:
+		{ //draw game state
 			glUseProgram(program);
 			glUniform3fv(program_to_light, 1, glm::value_ptr(glm::normalize(glm::vec3(0.0f, 1.0f, 10.0f))));
 			scene.render();
