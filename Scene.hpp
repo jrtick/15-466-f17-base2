@@ -5,6 +5,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <vector>
 #include <list>
+#include <string>
 
 #undef near //windows.h steps on this
 
@@ -57,6 +58,7 @@ struct Scene {
 	};
 	struct Object {
 		Transform transform;
+		std::string name;
 		//geometric info:
 		GLuint vao = 0;
 		GLuint start = 0;

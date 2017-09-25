@@ -35,8 +35,6 @@ public:
 
 	static Balloon* addBalloon(glm::vec3 center, glm::vec3 radius=glm::vec3(1,1,1)){
 		Balloon* balloon = (Balloon*) malloc(sizeof(Balloon));
-		*balloon = Balloon();
-
 		balloon->center = center;
 		balloon->radius = radius;
 
@@ -58,6 +56,7 @@ public:
 					balloon->elapsed_pop += elapsed;
 				}
 			}
+			it++;
 		}
 	}
 };
@@ -68,7 +67,7 @@ int main(int argc, char **argv) {
 	//Configuration:
 	struct {
 		std::string title = "Game2: Robot Fun Police";
-		glm::uvec2 size = glm::uvec2(640, 480);
+		glm::uvec2 size = glm::uvec2(2*640, 2*480);
 	} config;
 
 	struct {
@@ -203,7 +202,7 @@ int main(int argc, char **argv) {
 		attributes.Position = program_Position;
 		attributes.Normal = program_Normal;
 
-		meshes.load("dist/robot.v3n3c4",attributes);//meshes.load("meshes.blob", attributes);
+		meshes.load("meshes.blob", attributes);
 	}
 	
 	//------------ scene ------------
@@ -229,6 +228,7 @@ int main(int argc, char **argv) {
 		object.program = program;
 		object.program_mvp = program_mvp;
 		object.program_itmv = program_itmv;
+		object.name = name;
 		return object;
 	};
 
@@ -258,22 +258,28 @@ int main(int argc, char **argv) {
 				}
 				std::string name(&strings[0] + entry.name_begin, &strings[0] + entry.name_end);
 				add_object(name, entry.position, entry.rotation, entry.scale);
+				if(name.substr(0,7) == "Balloon"){
+					Balloon::addBalloon(entry.position);
+				}
 			}
 		}
+
+		{//setup hierarchy
+			Scene::Transform *stand,*base,*link1,*link2,*link3;
+			stand=base=link1=link2=link3=nullptr;
+			for (auto & obj : scene.objects){
+				if(obj.name == std::string("Stand")) stand = &obj.transform;
+				if(obj.name == std::string("Base")) base = &obj.transform;
+				if(obj.name == std::string("Link1")) link1 = &obj.transform;
+				if(obj.name == std::string("Link2")) link2 = &obj.transform;
+				if(obj.name == std::string("Link3")) link3 = &obj.transform;
+			}
+			base->set_parent(stand);
+			link1->set_parent(base);
+			link2->set_parent(link1);
+			link3->set_parent(link2);
+		}
 	}
-
-	//create a weird waving tree stack:
-	std::vector< Scene::Object * > tree_stack;
-	tree_stack.emplace_back( &add_object("Tree", glm::vec3(1.0f, 0.0f, 0.2f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(0.3f)) );
-	tree_stack.emplace_back( &add_object("Tree", glm::vec3(0.0f, 0.0f, 1.7f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(0.9f)) );
-	tree_stack.emplace_back( &add_object("Tree", glm::vec3(0.0f, 0.0f, 1.7f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(0.9f)) );
-	tree_stack.emplace_back( &add_object("Tree", glm::vec3(0.0f, 0.0f, 1.7f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(0.9f)) );
-
-	for (uint32_t i = 1; i < tree_stack.size(); ++i) {
-		tree_stack[i]->transform.set_parent(&tree_stack[i-1]->transform);
-	}
-
-	std::vector< float > wave_acc(tree_stack.size(), 0.0f);
 
 	glm::vec2 mouse = glm::vec2(0.0f, 0.0f); //mouse position in [-1,1]x[-1,1] coordinates
 
@@ -284,6 +290,11 @@ int main(int argc, char **argv) {
 		glm::vec3 target = glm::vec3(0.0f, 0.0f, 0.0f);
 	} camera;
 
+	Scene::Object* needle = nullptr;
+	for (auto & obj : scene.objects){
+		if(obj.name == std::string("Link3")) needle = &obj;
+	}
+		
 	//------------ game loop ------------
 
 	bool should_quit = false;
@@ -321,6 +332,12 @@ int main(int argc, char **argv) {
 				case SDLK_c:
 					robotState.add(robotState.high,-0.1f);
 					break;
+				case SDLK_PLUS:
+					camera.radius ++;
+					break;
+				case SDLK_MINUS:
+					camera.radius --;
+					break;
 				default:
 					break;
 				}
@@ -341,6 +358,7 @@ int main(int argc, char **argv) {
 		}
 		if (should_quit) break;
 
+
 		//update timers
 		auto current_time = std::chrono::high_resolution_clock::now();
 		static auto previous_time = current_time;
@@ -353,16 +371,26 @@ int main(int argc, char **argv) {
 			if(Balloon::ActiveBalloons.size() < 3)
 				Balloon::addBalloon(glm::vec3(0,0,0));
 
+			//update robot pos based on rotations:
+			
+			for(Scene::Object& object : scene.objects){
+				if(object.name == std::string("Base")){
+					object.transform.rotation = glm::angleAxis(robotState.base,glm::vec3(0,1,0));
+				}else if(object.name == std::string("Link1")){
+					object.transform.rotation = glm::angleAxis(robotState.low,glm::vec3(0,1,0));
+				}else if(object.name == std::string("Link2")){
+					object.transform.rotation = glm::angleAxis(robotState.mid,glm::vec3(0,1,0));
+				}else if(object.name == std::string("Link3")){
+					object.transform.rotation = glm::angleAxis(robotState.high,glm::vec3(0,1,0));
+				}
+			}
 
-			//tree stack
-			for (uint32_t i = 0; i < tree_stack.size(); ++i) {
-				wave_acc[i] += elapsed * (0.3f + 0.3f * i);
-				wave_acc[i] -= std::floor(wave_acc[i]);
-				float ang = (0.7f * float(M_PI)) * i;
-				tree_stack[i]->transform.rotation = glm::angleAxis(
-					std::cos(wave_acc[i] * 2.0f * float(M_PI)) * (0.2f + 0.1f * i),
-					glm::vec3(std::cos(ang), std::sin(ang), 0.0f)
-				);
+			//manage collisions
+			for(Balloon* balloon : Balloon::ActiveBalloons){
+				if(glm::length(balloon->center - needle->transform.position)<1){
+					balloon->state = Balloon::State::Popping;
+					printf("Popped!\n");
+				}
 			}
 
 			//camera
