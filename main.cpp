@@ -203,7 +203,7 @@ int main(int argc, char **argv) {
 		attributes.Position = program_Position;
 		attributes.Normal = program_Normal;
 
-		meshes.load("meshes.blob", attributes);
+		meshes.load("dist/robot.v3n3c4",attributes);//meshes.load("meshes.blob", attributes);
 	}
 	
 	//------------ scene ------------
