@@ -21,10 +21,11 @@ static GLuint link_program(GLuint vertex_shader, GLuint fragment_shader);
 class Balloon {
 public:
 	enum class State {Healthy, Popping, Gone};
-
+	static Scene::Object* popped;
 	static std::vector<Balloon*> ActiveBalloons;
 
-	glm::vec3 radius = glm::vec3(1,1,1);
+	float radius = 1;
+	Scene::Object* object = nullptr;
 	glm::vec3 center = glm::vec3();
 	glm::vec3 vel = glm::vec3();
 	glm::vec3 accel = glm::vec3();
@@ -33,10 +34,11 @@ public:
 
 	Balloon(){}
 
-	static Balloon* addBalloon(glm::vec3 center, glm::vec3 radius=glm::vec3(1,1,1)){
+	static Balloon* addBalloon(glm::vec3 center, Scene::Object* object, float radius=1){
 		Balloon* balloon = (Balloon*) malloc(sizeof(Balloon));
 		balloon->center = center;
 		balloon->radius = radius;
+		balloon->object = object;
 
 		ActiveBalloons.push_back(balloon);
 		return balloon;
@@ -44,24 +46,44 @@ public:
 
 	static void step(float elapsed){
 		std::vector<Balloon*>::iterator it = ActiveBalloons.begin();
+		
+
 		while(it != ActiveBalloons.end()){
 			Balloon* balloon = *it;
-			if(balloon->state == State::Gone){
-				it = ActiveBalloons.erase(it);
+			if(balloon->state == State::Gone){ //TODO: DONT ERASE JUST MAKE INVISIBLE AND RESET
+				//it = ActiveBalloons.erase(it);
+				balloon->elapsed_pop += elapsed;
+				if(balloon->elapsed_pop>2){
+					balloon->state = State::Healthy;
+					balloon->elapsed_pop = 0;
+					balloon->object->invisible = false;
+				}
 			}else{
 				balloon->vel += elapsed*balloon->accel;
 				balloon->center += elapsed*balloon->vel;
 
 				if(balloon->state == State::Popping){
 					balloon->elapsed_pop += elapsed;
+					balloon->object->invisible = true;
+					popped->invisible = false;
+					popped->transform.position = balloon->object->transform.position;
+					if(balloon->elapsed_pop > 1){
+						balloon->state = State::Gone;
+						balloon->object->invisible = true;
+						popped->invisible = true;
+						balloon->elapsed_pop = 0;
+					}
 				}
 			}
 			it++;
 		}
 	}
+	void pop(){
+		if(state == State::Healthy) state = State::Popping;
+	}
 };
 std::vector<Balloon*> Balloon::ActiveBalloons = std::vector<Balloon*>();
-
+Scene::Object* Balloon::popped = nullptr;
 
 int main(int argc, char **argv) {
 	//Configuration:
@@ -232,7 +254,7 @@ int main(int argc, char **argv) {
 		return object;
 	};
 
-
+	Scene::Transform *stand,*base,*link1,*link2,*link3,*tip;
 	{ //read objects to add from "scene.blob":
 		std::ifstream file("scene.blob", std::ios::binary);
 
@@ -259,25 +281,31 @@ int main(int argc, char **argv) {
 				std::string name(&strings[0] + entry.name_begin, &strings[0] + entry.name_end);
 				add_object(name, entry.position, entry.rotation, entry.scale);
 				if(name.substr(0,7) == "Balloon"){
-					Balloon::addBalloon(entry.position);
+					Balloon::addBalloon(entry.position,&scene.objects.back());
 				}
 			}
 		}
+		//balloon popping
+		add_object(std::string("Balloon1-Pop"), glm::vec3(0,0,0), glm::quat(0,0,0,0), glm::vec3(1,1,1));
+		Balloon::popped = &scene.objects.back();
+		Balloon::popped->invisible = true;
+		
 
 		{//setup hierarchy
-			Scene::Transform *stand,*base,*link1,*link2,*link3;
-			stand=base=link1=link2=link3=nullptr;
+			stand=base=link1=link2=link3=tip=nullptr;
 			for (auto & obj : scene.objects){
 				if(obj.name == std::string("Stand")) stand = &obj.transform;
 				if(obj.name == std::string("Base")) base = &obj.transform;
 				if(obj.name == std::string("Link1")) link1 = &obj.transform;
 				if(obj.name == std::string("Link2")) link2 = &obj.transform;
 				if(obj.name == std::string("Link3")) link3 = &obj.transform;
+				if(obj.name == std::string("Tip")) tip = &obj.transform;
 			}
-			base->set_parent(stand);
-			link1->set_parent(base);
-			link2->set_parent(link1);
-			link3->set_parent(link2);
+			tip->set_parent(link3);tip->position -= link3->position;
+			link3->set_parent(link2);link3->position -= link2->position;
+			link2->set_parent(link1);link2->position -= link1->position;
+			link1->set_parent(base);link1->position -= base->position;
+			base->set_parent(stand);base->position -= stand->position;
 		}
 	}
 
@@ -289,11 +317,6 @@ int main(int argc, char **argv) {
 		float azimuth = 0.0f;
 		glm::vec3 target = glm::vec3(0.0f, 0.0f, 0.0f);
 	} camera;
-
-	Scene::Object* needle = nullptr;
-	for (auto & obj : scene.objects){
-		if(obj.name == std::string("Link3")) needle = &obj;
-	}
 		
 	//------------ game loop ------------
 
@@ -332,10 +355,10 @@ int main(int argc, char **argv) {
 				case SDLK_c:
 					robotState.add(robotState.high,-0.1f);
 					break;
-				case SDLK_PLUS:
+				case SDLK_TAB:
 					camera.radius ++;
 					break;
-				case SDLK_MINUS:
+				case SDLK_LSHIFT:
 					camera.radius --;
 					break;
 				default:
@@ -364,34 +387,28 @@ int main(int argc, char **argv) {
 		static auto previous_time = current_time;
 		float elapsed = std::chrono::duration< float >(current_time - previous_time).count();
 		previous_time = current_time;
+		static float fulltime = 0;
+		fulltime += elapsed;
 
 		{ //update game state
 			//manage balloons
 			Balloon::step(elapsed);
+			/*
 			if(Balloon::ActiveBalloons.size() < 3)
 				Balloon::addBalloon(glm::vec3(0,0,0));
+			*/
 
 			//update robot pos based on rotations:
-			
-			for(Scene::Object& object : scene.objects){
-				if(object.name == std::string("Base")){
-					object.transform.rotation = glm::angleAxis(robotState.base,glm::vec3(0,1,0));
-				}else if(object.name == std::string("Link1")){
-					object.transform.rotation = glm::angleAxis(robotState.low,glm::vec3(0,1,0));
-				}else if(object.name == std::string("Link2")){
-					object.transform.rotation = glm::angleAxis(robotState.mid,glm::vec3(0,1,0));
-				}else if(object.name == std::string("Link3")){
-					object.transform.rotation = glm::angleAxis(robotState.high,glm::vec3(0,1,0));
-				}
-			}
+			base->rotation = glm::angleAxis(robotState.base,glm::vec3(0,0,1));
+			link1->rotation = glm::angleAxis(robotState.low,glm::vec3(1,0,0));
+			link2->rotation = glm::angleAxis(robotState.mid,glm::vec3(1,0,0));
+			link3->rotation = glm::angleAxis(robotState.high,glm::vec3(1,0,0));
 
 			//manage collisions
+			glm::vec4 tipposh = tip->make_local_to_world()*glm::vec4(tip->position,1);
+			glm::vec3 tippos = glm::vec3(tipposh.x,tipposh.y,tipposh.z)/tipposh.w;
 			for(Balloon* balloon : Balloon::ActiveBalloons){
-				if(glm::length(balloon->center - needle->transform.position)<1){
-					balloon->state = Balloon::State::Popping;
-					printf("Popped!\n");
-				}
-			}
+				if(glm::length(balloon->center - tippos)<balloon->radius+0.1f) balloon->pop();			}
 
 			//camera
 			scene.camera.transform.position = camera.radius * glm::vec3(

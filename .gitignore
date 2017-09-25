@@ -1,5 +1,6 @@
 dist/main
 dist/main.exe
+dist/*
 objs
 dist/SDL2.dll
 kit-libs-*

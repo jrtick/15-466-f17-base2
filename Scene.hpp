@@ -59,6 +59,7 @@ struct Scene {
 	struct Object {
 		Transform transform;
 		std::string name;
+		bool invisible = false;
 		//geometric info:
 		GLuint vao = 0;
 		GLuint start = 0;
