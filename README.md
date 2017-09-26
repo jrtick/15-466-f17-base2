@@ -2,21 +2,27 @@
 
 *Robot Fun Police* is *Jordan Tick*'s implementation of [*Robot Fun Police*](http://graphics.cs.cmu.edu/courses/15-466-f17/game2-designs/jmccann) for game2 in 15-466-f17.
 
-*Include a Screenshot Here*
+![alt text](https://raw.githubusercontent.com/jrtick/15-466-f17-base2/master/screenshots/screenshot.png)
 
 ## Asset Pipeline
 
-*Briefly describe the asset pipeline for this game. What sorts of source files are used? How are they processed? How are they loaded?*
+The assets used for this game are in models/robot.blend. They are processed via the blender python api into byte 'blob' files that list out the meshes' vertices, normals, and colors.
+
+Hierarchy is set in main.cpp by parenting transforms to their parent transform.
 
 ## Architecture
 
-*Provide a brief introduction to how you implemented the design. Talk about the basic structure of your code.*
+There is a struct of rotations that describes the state of the robot arm. It can be manipulated through ('a','s'),('w','e'),('z','x'),and ('d', 'c').
+
+There is a class for balloons. When all balloons instantiated are set to the state 'Gone', the game is over. Until then, the balloon positions are stepped forward by their velocities. Collision between robot needle and balloon was determined by instantiating a small cube at the tip of the needle such that checking the distance between this cube and the balloon centers determines collision.
 
 ## Reflection
 
-*Reflect on the assignment. What was difficult? What worked well? If you were doing it again, what would you change?*
+It was a little difficult to add vertex colors into the game. At one point, a struct string I originally had as "v3n3c4" was packed to be 8 chars instead of 6. To combat this, I just left it as "v3n3" which correctly packed to 4.
 
-*Reflect on the design document. What was clear and what was ambiguous? How did you resolve the ambiguities?*
+The balloon and robot logic was simple! Editing the source code for the shaders was cool. If I was doing it again, I'd try to get more familiar with the blender API and set hierarchy into the blob file. 
+
+My computer didn't seem to cooperate with the SDL keysyms for period and comma, which is why I switched to using letter keys instead. That was my only issue with the design doc!
 
 
 # About Base2

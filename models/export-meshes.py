@@ -15,7 +15,7 @@ import struct
 bpy.ops.wm.open_mainfile(filepath='robot.blend')
 
 #names of objects whose meshes to write (not actually the names of the meshes):
-to_write = ["Balloon1","Balloon1-Pop","Balloon2","Balloon3","Floor","Crate","Stand","Base","Link1","Link2","Link3","Tip"]
+to_write = ["Balloon1","Balloon1-Pop","Balloon2","Balloon3","Floor","Crate.001","Crate.002","Crate.003","Crate.004","Crate.005","Crate","Stand","Base","Link1","Link2","Link3","Tip"]
 #data contains vertex and normal data from the meshes:
 data = b''
 

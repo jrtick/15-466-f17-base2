@@ -26,7 +26,7 @@ public:
 
 	float radius = 0.5; //balloon rad is approx 1
 	Scene::Object* object = nullptr;
-	glm::vec3 vel = glm::vec3();
+	glm::vec3 vel = glm::vec3(0,0,1);
 	State state = State::Healthy;
 	float elapsed_pop = 0; //only valid when State::Popping. Animate bigger, pop, shrink for black hole effect?
 
@@ -34,12 +34,15 @@ public:
 
 	static Balloon* addBalloon(Scene::Object* object, float radius=1){
 		Balloon* balloon = (Balloon*) malloc(sizeof(Balloon));
+		*balloon = Balloon(); //call initializer!
 		balloon->radius = radius;
 		balloon->object = object;
-		balloon->vel = glm::vec3(0,0,1);
 
 		ActiveBalloons.push_back(balloon);
 		return balloon;
+	}
+	static void freeBalloons(){
+		for(auto b : ActiveBalloons) free(b);
 	}
 
 	static void step(float elapsed){
@@ -51,7 +54,7 @@ public:
 			glm::vec3* pos = &(balloon->object->transform.position);
 			switch(balloon->state){
 			case State::Gone:
-				//do nothing. Could reset balloon position here if wanted
+				//do nothing. Could reset balloon position here if wanted infinite game
 				break;
 			case State::Healthy:
 				if(pos->z+elapsed*balloon->vel.z > 3 || pos->z+elapsed*balloon->vel.z < balloon->radius) balloon->vel *= -1;
@@ -80,7 +83,6 @@ public:
 		for(auto balloon : ActiveBalloons){
 			if(balloon->state != State::Gone) return false;
 		}
-		printf("Game over!\n");
 		return true;
 	}
 };
@@ -248,7 +250,7 @@ int main(int argc, char **argv) {
 	//(transform will be handled in the update function below)
 
 	//add some objects from the mesh library:
-	auto add_object = [&](std::string const &name, glm::vec3 const &position, glm::quat const &rotation, glm::vec3 const &scale) -> Scene::Object & {
+	auto add_object = [&](std::string const &name, glm::vec3 const &position, glm::quat const &rotation, glm::vec3 const &scale) -> Scene::Object* {
 		Mesh const &mesh = meshes.get(name);
 		scene.objects.emplace_back();
 		Scene::Object &object = scene.objects.back();
@@ -262,7 +264,7 @@ int main(int argc, char **argv) {
 		object.program_mvp = program_mvp;
 		object.program_itmv = program_itmv;
 		object.name = name;
-		return object;
+		return &object;
 	};
 
 	Scene::Transform *stand,*base,*link1,*link2,*link3,*tip;
@@ -296,11 +298,6 @@ int main(int argc, char **argv) {
 				}
 			}
 		}
-		//balloon popping
-		add_object(std::string("Balloon1-Pop"), glm::vec3(0,0,0), glm::quat(0,0,0,0), glm::vec3(1,1,1));
-		Balloon::popped = &scene.objects.back();
-		Balloon::popped->invisible = true;
-		
 
 		{//setup hierarchy
 			stand=base=link1=link2=link3=tip=nullptr;
@@ -318,6 +315,14 @@ int main(int argc, char **argv) {
 			link1->set_parent(base);link1->position -= base->position;
 			base->set_parent(stand);base->position -= stand->position;
 		}
+
+		//balloon popping
+		add_object(std::string("Balloon1-Pop"), glm::vec3(0,0,0), glm::quat(0,0,0,0), glm::vec3(1,1,1));
+		Balloon::popped = &scene.objects.back();
+		Balloon::popped->invisible = true;
+		
+
+		
 	}
 
 	glm::vec2 mouse = glm::vec2(0.0f, 0.0f); //mouse position in [-1,1]x[-1,1] coordinates
@@ -423,7 +428,8 @@ int main(int argc, char **argv) {
 				static float endtime = fulltime;
 				delay += elapsed;
 				if(delay > 2){
-					printf("your total time was %.2f!\n",endtime);
+					printf("Congratulations! Your total time was %.2f!\n",endtime);
+					Balloon::freeBalloons();
 					should_quit = true;
 				}
 			}

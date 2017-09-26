@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+#blender is at /usr/bin/blender
 
 #based on 'export-sprites.py' and 'glsprite.py' from TCHOW Rainbow; code used is released into the public domain.
 
@@ -43,7 +44,7 @@ for obj in bpy.data.objects:
 	if obj.type != 'MESH': continue;
 	if obj.layers[0] == False: continue
 	print("Writing '" + obj.name + "'...")
-	bpy.ops.object.mode_set(mode='OBJECT') #get out of edit mode (just in case)
+	#bpy.ops.object.mode_set(mode='OBJECT') #get out of edit mode (just in case)
 
 	obj.data = obj.data.copy() #make mesh single user, just in case it is shared with another object the script needs to write later.
 
