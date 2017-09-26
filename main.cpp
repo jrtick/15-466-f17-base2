@@ -24,21 +24,19 @@ public:
 	static Scene::Object* popped;
 	static std::vector<Balloon*> ActiveBalloons;
 
-	float radius = 1;
+	float radius = 0.5; //balloon rad is approx 1
 	Scene::Object* object = nullptr;
-	glm::vec3 center = glm::vec3();
 	glm::vec3 vel = glm::vec3();
-	glm::vec3 accel = glm::vec3();
 	State state = State::Healthy;
 	float elapsed_pop = 0; //only valid when State::Popping. Animate bigger, pop, shrink for black hole effect?
 
 	Balloon(){}
 
-	static Balloon* addBalloon(glm::vec3 center, Scene::Object* object, float radius=1){
+	static Balloon* addBalloon(Scene::Object* object, float radius=1){
 		Balloon* balloon = (Balloon*) malloc(sizeof(Balloon));
-		balloon->center = center;
 		balloon->radius = radius;
 		balloon->object = object;
+		balloon->vel = glm::vec3(0,0,1);
 
 		ActiveBalloons.push_back(balloon);
 		return balloon;
@@ -50,36 +48,40 @@ public:
 
 		while(it != ActiveBalloons.end()){
 			Balloon* balloon = *it;
-			if(balloon->state == State::Gone){ //TODO: DONT ERASE JUST MAKE INVISIBLE AND RESET
-				//it = ActiveBalloons.erase(it);
+			glm::vec3* pos = &(balloon->object->transform.position);
+			switch(balloon->state){
+			case State::Gone:
+				//do nothing. Could reset balloon position here if wanted
+				break;
+			case State::Healthy:
+				if(pos->z+elapsed*balloon->vel.z > 3 || pos->z+elapsed*balloon->vel.z < balloon->radius) balloon->vel *= -1;
+				*pos += elapsed*balloon->vel;
+				break;
+			case State::Popping:
 				balloon->elapsed_pop += elapsed;
-				if(balloon->elapsed_pop>2){
-					balloon->state = State::Healthy;
-					balloon->elapsed_pop = 0;
-					balloon->object->invisible = false;
-				}
-			}else{
-				balloon->vel += elapsed*balloon->accel;
-				balloon->center += elapsed*balloon->vel;
-
-				if(balloon->state == State::Popping){
-					balloon->elapsed_pop += elapsed;
+				balloon->object->invisible = true;
+				popped->invisible = false;
+				popped->transform.position = balloon->object->transform.position;
+				if(balloon->elapsed_pop > 1){
+					balloon->state = State::Gone;
 					balloon->object->invisible = true;
-					popped->invisible = false;
-					popped->transform.position = balloon->object->transform.position;
-					if(balloon->elapsed_pop > 1){
-						balloon->state = State::Gone;
-						balloon->object->invisible = true;
-						popped->invisible = true;
-						balloon->elapsed_pop = 0;
-					}
+					popped->invisible = true;
+					balloon->elapsed_pop = 0;
 				}
+				break;
 			}
 			it++;
 		}
 	}
 	void pop(){
 		if(state == State::Healthy) state = State::Popping;
+	}
+	static bool gameOver(){
+		for(auto balloon : ActiveBalloons){
+			if(balloon->state != State::Gone) return false;
+		}
+		printf("Game over!\n");
+		return true;
 	}
 };
 std::vector<Balloon*> Balloon::ActiveBalloons = std::vector<Balloon*>();
@@ -89,7 +91,7 @@ int main(int argc, char **argv) {
 	//Configuration:
 	struct {
 		std::string title = "Game2: Robot Fun Police";
-		glm::uvec2 size = glm::uvec2(2*640, 2*480);
+		glm::uvec2 size = glm::uvec2(1280, 960);
 	} config;
 
 	struct {
@@ -169,6 +171,7 @@ int main(int argc, char **argv) {
 	GLuint program = 0;
 	GLuint program_Position = 0;
 	GLuint program_Normal = 0;
+	GLuint program_Color = 0;
 	GLuint program_mvp = 0;
 	GLuint program_itmv = 0;
 	GLuint program_to_light = 0;
@@ -179,10 +182,13 @@ int main(int argc, char **argv) {
 			"uniform mat3 itmv;\n"
 			"in vec4 Position;\n"
 			"in vec3 Normal;\n"
+			"in vec3 Color;\n"
 			"out vec3 normal;\n"
+			"out vec3 color;\n"
 			"void main() {\n"
 			"	gl_Position = mvp * Position;\n"
 			"	normal = itmv * Normal;\n"
+			"	color = Color;\n"
 			"}\n"
 		);
 
@@ -190,10 +196,11 @@ int main(int argc, char **argv) {
 			"#version 330\n"
 			"uniform vec3 to_light;\n"
 			"in vec3 normal;\n"
+			"in vec3 color;\n"
 			"out vec4 fragColor;\n"
 			"void main() {\n"
 			"	float light = max(0.0, dot(normalize(normal), to_light));\n"
-			"	fragColor = vec4(light * vec3(1.0, 1.0, 1.0), 1.0);\n"
+			"	fragColor = vec4(light*color, 1.0);\n"
 			"}\n"
 		);
 
@@ -204,6 +211,9 @@ int main(int argc, char **argv) {
 		if (program_Position == -1U) throw std::runtime_error("no attribute named Position");
 		program_Normal = glGetAttribLocation(program, "Normal");
 		if (program_Normal == -1U) throw std::runtime_error("no attribute named Normal");
+
+		program_Color = glGetAttribLocation(program, "Color");
+		if (program_Color == -1U) throw std::runtime_error("no attribute named Color");
 
 		//look up uniform locations:
 		program_mvp = glGetUniformLocation(program, "mvp");
@@ -223,6 +233,7 @@ int main(int argc, char **argv) {
 		Meshes::Attributes attributes;
 		attributes.Position = program_Position;
 		attributes.Normal = program_Normal;
+		attributes.Color = program_Color;
 
 		meshes.load("meshes.blob", attributes);
 	}
@@ -281,7 +292,7 @@ int main(int argc, char **argv) {
 				std::string name(&strings[0] + entry.name_begin, &strings[0] + entry.name_end);
 				add_object(name, entry.position, entry.rotation, entry.scale);
 				if(name.substr(0,7) == "Balloon"){
-					Balloon::addBalloon(entry.position,&scene.objects.back());
+					Balloon::addBalloon(&scene.objects.back());
 				}
 			}
 		}
@@ -312,7 +323,7 @@ int main(int argc, char **argv) {
 	glm::vec2 mouse = glm::vec2(0.0f, 0.0f); //mouse position in [-1,1]x[-1,1] coordinates
 
 	struct {
-		float radius = 5.0f;
+		float radius = 8.0f;
 		float elevation = 0.0f;
 		float azimuth = 0.0f;
 		glm::vec3 target = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -337,16 +348,16 @@ int main(int argc, char **argv) {
 				case SDLK_s:
 					robotState.add(robotState.base,-0.1f);
 					break;
-				case SDLK_w:
+				case SDLK_z:
 					robotState.add(robotState.low,0.1f);
 					break;
-				case SDLK_e:
+				case SDLK_x:
 					robotState.add(robotState.low,-0.1f);
 					break;
-				case SDLK_z:
+				case SDLK_w:
 					robotState.add(robotState.mid,0.1f);
 					break;
-				case SDLK_x:
+				case SDLK_e:
 					robotState.add(robotState.mid,-0.1f);
 					break;
 				case SDLK_d:
@@ -355,10 +366,10 @@ int main(int argc, char **argv) {
 				case SDLK_c:
 					robotState.add(robotState.high,-0.1f);
 					break;
-				case SDLK_TAB:
+				case SDLK_TAB: //zoom out
 					camera.radius ++;
 					break;
-				case SDLK_LSHIFT:
+				case SDLK_LSHIFT: //zoom in
 					camera.radius --;
 					break;
 				default:
@@ -393,10 +404,6 @@ int main(int argc, char **argv) {
 		{ //update game state
 			//manage balloons
 			Balloon::step(elapsed);
-			/*
-			if(Balloon::ActiveBalloons.size() < 3)
-				Balloon::addBalloon(glm::vec3(0,0,0));
-			*/
 
 			//update robot pos based on rotations:
 			base->rotation = glm::angleAxis(robotState.base,glm::vec3(0,0,1));
@@ -408,7 +415,19 @@ int main(int argc, char **argv) {
 			glm::vec4 tipposh = tip->make_local_to_world()*glm::vec4(tip->position,1);
 			glm::vec3 tippos = glm::vec3(tipposh.x,tipposh.y,tipposh.z)/tipposh.w;
 			for(Balloon* balloon : Balloon::ActiveBalloons){
-				if(glm::length(balloon->center - tippos)<balloon->radius+0.1f) balloon->pop();			}
+				if(glm::length(balloon->object->transform.position - tippos) < balloon->radius) balloon->pop();
+			}
+
+			if(Balloon::gameOver()){
+				static float delay = 0;
+				static float endtime = fulltime;
+				delay += elapsed;
+				if(delay > 2){
+					printf("your total time was %.2f!\n",endtime);
+					should_quit = true;
+				}
+			}
+
 
 			//camera
 			scene.camera.transform.position = camera.radius * glm::vec3(

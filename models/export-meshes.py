@@ -60,22 +60,35 @@ for name in to_write:
 
 	index += struct.pack('I', vertex_count)
 	index += struct.pack('I', len(mesh.polygons) * 3)
-
+	try:
+		colors = mesh.vertex_colors.active.data
+	except:
+		colors = None
 	#write the mesh:
 	for poly in mesh.polygons:
 		assert(len(poly.loop_indices) == 3)
 		for i in range(0,3):
 			assert(mesh.loops[poly.loop_indices[i]].vertex_index == poly.vertices[i])
 			loop = mesh.loops[poly.loop_indices[i]]
+			if(colors is not None):
+				color = colors[poly.loop_indices[i]].color
 			vertex = mesh.vertices[loop.vertex_index]
 			for x in mesh.vertices[loop.vertex_index].co:
 				data += struct.pack('f', x)
 			for x in loop.normal:
 				data += struct.pack('f', x)
+			if(colors is None):
+				data += struct.pack('f',1)
+				data += struct.pack('f',1)
+				data += struct.pack('f',1)
+			else:
+				data += struct.pack('f',color.r)
+				data += struct.pack('f',color.g)
+				data += struct.pack('f',color.b)
 	vertex_count += len(mesh.polygons) * 3
 
 #check that we wrote as much data as anticipated:
-assert(vertex_count * (3 * 4 + 3 * 4) == len(data))
+assert(vertex_count * (3 * 4 + 3 * 4 + 3*4) == len(data))
 
 #write the data chunk and index chunk to an output blob:
 blob = open('../dist/meshes.blob', 'wb')
